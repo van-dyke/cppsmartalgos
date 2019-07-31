@@ -4,7 +4,7 @@
 
 Let's consider case: we have an Tuple and we need to sum up all the components of that Tuple. 
 To do that, we need to invoke callable object f with Tuple elements as arguments and sum up their values. In C++17 it's simple - std::apply function is implemented. 
-Below, possible implementation of std::apply is proposed...
+Below, possible implementation of std::apply is proposed for preC++17 compilers...
 
 ```cpp
 #include <iostream>
