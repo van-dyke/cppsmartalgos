@@ -176,3 +176,18 @@ int main()
 }
 
 ```
+
+another implementation:
+
+```cpp
+template<class Root, class... Branches> 
+auto comp(Root &&root, Branches &&... branches) {
+     return [root, branches...](auto &&...args) {
+         return root(branches(std::forward<decltype(args)>(args)...)...);
+     };
+}
+
+//...
+
+std::cout << comp([](auto x, auto y){ return x+y; }, [](auto x){ return x+2; }, [](auto x){ return x+1; } )(3) << std::endl;
+```
