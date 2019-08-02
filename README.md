@@ -70,3 +70,109 @@ struct fwrapper
 };
 // ...
 std::cout <<  notstd::apply(fwrapper(), t);`
+```
+***2. Universal callable object***
+```cpp
+template<typename T>
+struct Callable
+{
+    Callable() {};
+    
+    Callable(T u) : callable(u)
+    {};        
+    
+    void call()
+    {
+        callable();   
+    }
+    
+    T callable;
+};
+
+
+void fun()
+{
+    std::cout << "function" << std::endl;   
+}
+
+
+int main()
+{
+    auto lambda = [](){ std::cout << "lambda" << std::endl; };
+    
+    std::function<void()> f = [](){ std::cout << "std::function" << std::endl; };
+    
+    struct Functor
+    {
+        void operator()(void)
+        {   std::cout << "functor" << std::endl; };
+    };
+        
+    Callable<decltype(lambda)> foo(lambda);
+    
+    Callable<std::function<void()>> boo(f);
+    
+    Callable<Functor> goo;
+    
+    Callable<std::function<void()>> zoo(fun);
+    
+    foo.call();     //Output:   lambda
+    boo.call();     //Output:   std::function
+    goo.call();     //Output:   functor
+    zoo.call();     //Output:   function
+    
+}
+
+```
+
+***3. Function composition***
+
+```cpp
+template<typename R, typename F>
+auto compose(R&& r, F&& f)
+{
+    std::cout << "4: " << __PRETTY_FUNCTION__ << std::endl;
+    return [=](auto x){ return r(f(x)); };
+}
+
+template<typename R, typename... F>
+auto compose(R&& r, F&&... f)
+{   
+    std::cout << "3: " << __PRETTY_FUNCTION__ << std::endl;
+    return [=](auto x){ return r( compose(f...)(x) ); };
+}
+
+
+template<typename R, typename G>
+auto operator*(R&& r, G&& g)
+{   
+    std::cout << "2: " << __PRETTY_FUNCTION__ << std::endl;
+    return compose(r, g);
+}
+
+template<typename R, typename... G>
+auto operator*(R&& r, G&&... g)
+{
+    std::cout << "1: " << __PRETTY_FUNCTION__ << std::endl;
+    return operator*( std::forward<R>(r), std::forward<G...>(g...) );
+}
+
+int main()
+{
+    
+    auto l = compose( [](auto x){ return x+x; }, 
+                      [](auto x){ return x*x; } )(3); // 3*3, then 9+9
+    
+    auto r = compose( [](auto x){ return x+x; }, 
+                      [](auto x){ return x*x; },                       
+                      [](auto x){ return x+1; } )(3); // 3+1, then 4*4, then 16+16
+                      
+    auto h = ( [](auto x){ return x+x; } * [](auto x){ return x*x; } * [](auto x){ return x+2; } )(3); 
+    // 3+2, then 5*5, then 25+25                      
+    
+    std::cout << l << std::endl;    //Output: 18
+    std::cout << r << std::endl;    //Output: 32
+    std::cout << h << std::endl;    //Output: 50
+}
+
+```
