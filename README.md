@@ -191,3 +191,33 @@ auto comp(Root &&root, Branches &&... branches) {
 
 std::cout << comp([](auto x, auto y){ return x+y; }, [](auto x){ return x+2; }, [](auto x){ return x+1; } )(3) << std::endl;
 ```
+
+***4. The Abuse of Variadic Expansion Rules And std::initializer_list*** 
+
+***(taken from https://articles.emptycrate.com/2016/05/14/folds_in_cpp11_ish.html)***
+
+Someone (not me) figured out that we can abuse the std::initializer_list type to let us guarantee the order of execution of some statements while not having to recursively instantiate templates. For this to work we need to create some temporary object to let us use the braced initializer syntax and hold some result values for us.
+
+Only problem is, our print function doesn’t return a result value. So what do we do? Give it a dummy return value!
+
+```cpp
+#include <iostream>
+
+template<typename T>
+void print(const T &t)
+{
+  std::cout << t << '\n';
+}
+
+template<typename ... T>
+  void print(const T& ... t)
+{
+  std::initializer_list<int>{ (print(t), 0)... };
+}
+
+int main()
+{
+  print(1, 2, 3.4, "Hello World");
+}
+```
+The statement (print(t), 0)... takes advantage of the comma operator to say “execute the first thing then return the second thing.” Even though print(t) returns void, we are giving a 0 to be pushed into the std::initializer_list<int> and the compiler just magically compiles that away. This code ends up being no less efficient than the previous version at runtime and much more efficient at compile time.
