@@ -1,6 +1,7 @@
 # Some smart algorithms based on modern C++ semantics
 
-***1. Sum of tuple elements (using variadic templates and std::apply implementations, C++14 version)***
+# 1. Sum of tuple elements 
+***(using variadic templates and std::apply implementations, C++14 version)***
 
 Let's consider case: we have an Tuple and we need to sum up all the components of that Tuple. 
 To do that, we need to invoke callable object f with Tuple elements as arguments and sum up their values. In C++17 it's simple - std::apply function is implemented. 
@@ -71,7 +72,7 @@ struct fwrapper
 // ...
 std::cout <<  notstd::apply(fwrapper(), t);`
 ```
-***2. Universal callable object***
+# 2. Universal callable object
 ```cpp
 template<typename T>
 struct Callable
@@ -125,7 +126,7 @@ int main()
 
 ```
 
-***3. Function composition***
+# 3. Function composition
 
 ```cpp
 template<typename R, typename F>
@@ -192,7 +193,7 @@ auto comp(Root &&root, Branches &&... branches) {
 std::cout << comp([](auto x, auto y){ return x+y; }, [](auto x){ return x+2; }, [](auto x){ return x+1; } )(3) << std::endl;
 ```
 
-***4. The Abuse of Variadic Expansion Rules And std::initializer_list*** 
+# 4. The Abuse of Variadic Expansion Rules And std::initializer_list
 
 ***(taken from https://articles.emptycrate.com/2016/05/14/folds_in_cpp11_ish.html)***
 
