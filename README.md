@@ -222,3 +222,67 @@ int main()
 }
 ```
 The statement (print(t), 0)... takes advantage of the comma operator to say “execute the first thing then return the second thing.” Even though print(t) returns void, we are giving a 0 to be pushed into the std::initializer_list<int> and the compiler just magically compiles that away. This code ends up being no less efficient than the previous version at runtime and much more efficient at compile time.
+
+# 5a. The overload Pattern
+***(taken from https://www.bfilipek.com/2019/02/2lines3featuresoverload.html)***
+
+Let’s write a simple type that derives from two base classes:
+
+```cpp
+#include <iostream>
+#include <string>
+
+struct BaseInt
+{
+    void Func(int) { std::cout << "BaseInt...\n"; }
+};
+
+struct BaseDouble
+{
+    void Func(double) { std::cout << "BaseDouble...\n"; }
+};
+
+struct Derived : public BaseInt, BaseDouble
+{
+    using BaseInt::Func;        // without: error: request for member 'Func' is ambiguous
+    using BaseDouble::Func;
+};
+
+int main()
+{
+    Derived d;
+    d.Func(10.0);   // call Func in BaseDouble
+    d.Func(5);      // call Func in BaseInt
+}
+```
+We have two bases classes that implement Func. We want to call that method from the derived object. To do that, we have to bring the functions into the scope of the derived class like that:
+```cpp
+struct Derived : public BaseInt, BaseDouble
+{
+    using BaseInt::Func;
+    using BaseDouble::Func;
+};
+```
+It is possible to ommit this limitation using variadic templates.
+```cpp
+
+template <typename T, typename... Ts>
+struct Overloader : T, Overloader<Ts...> 
+{
+    using T::Func;
+    using Overloader<Ts...>::Func;
+};
+
+template <typename T> 
+struct Overloader<T> : T 
+{
+    using T::Func;
+};
+
+```
+And now we are able to use ***Overloader*** class like that:
+```cpp
+    Overloader<BaseInt, BaseDouble> overloader;
+    overloader.Func(10.0);  // call Func in BaseDouble
+    overloader.Func(5);     // call Func in BaseInt
+```
