@@ -223,7 +223,7 @@ int main()
 ```
 The statement (print(t), 0)... takes advantage of the comma operator to say “execute the first thing then return the second thing.” Even though print(t) returns void, we are giving a 0 to be pushed into the std::initializer_list<int> and the compiler just magically compiles that away. This code ends up being no less efficient than the previous version at runtime and much more efficient at compile time.
 
-# 5a. The overload Pattern
+# 5. The overload Pattern
 ***(taken from https://www.bfilipek.com/2019/02/2lines3featuresoverload.html)***
 
 Let’s write a simple type that derives from two base classes:
@@ -286,3 +286,150 @@ And now we are able to use ***Overloader*** class like that:
     overloader.Func(10.0);  // call Func in BaseDouble
     overloader.Func(5);     // call Func in BaseInt
 ```
+
+# 6. Visitor pattern with std::variant (C++17)
+***( taken from https://www.bfilipek.com/2018/06/variant.html )***
+
+We have a variant that represents a package with four various types, and then we use super-advanced VisitPackage structure to detect what’s inside. The example is also quite interesting as you can invoke a polymorphic operation over a set of classes that are not sharing the same base type.
+
+```cpp
+struct Fluid { };
+struct LightItem { };
+struct HeavyItem { };
+struct FragileItem { };
+
+struct VisitPackage
+{
+    void operator()(Fluid& ) { cout << "fluid\n"; }
+    void operator()(LightItem& ) { cout << "light item\n"; }
+    void operator()(HeavyItem& ) { cout << "heavy item\n"; }
+    void operator()(FragileItem& ) { cout << "fragile\n"; }
+};
+
+int main()
+{
+    std::variant<Fluid, LightItem, HeavyItem, FragileItem> package { FragileItem() };
+    std::visit(VisitPackage(), package);
+}
+```
+Output:
+***fragile***
+
+We can also use the “overload pattern” from ***5.*** to use several separate lambda expressions:
+```cpp
+template<class... Ts> struct overload : Ts... { using Ts::operator()...; };
+template<class... Ts> overload(Ts...) -> overload<Ts...>;
+
+int main()
+{
+    std::variant<Fluid, LightItem, HeavyItem, FragileItem> package;
+
+    std::visit(overload{
+        [](Fluid& ) { cout << "fluid\n"; },
+        [](LightItem& ) { cout << "light item\n"; },
+        [](HeavyItem& ) { cout << "heavy item\n"; },
+        [](FragileItem& ) { cout << "fragile\n"; }
+    }, package);
+}
+```
+
+But std::visit can accept more variants! It returns the type from that selected overload.
+
+For example we can call it on two packages:
+```cpp
+std::variant<LightItem, HeavyItem> basicPackA;
+std::variant<LightItem, HeavyItem> basicPackB;
+
+std::visit(overload{
+    [](LightItem&, LightItem& ) { cout << "2 light items\n"; },
+    [](LightItem&, HeavyItem& ) { cout << "light & heavy items\n"; },
+    [](HeavyItem&, LightItem& ) { cout << "heavy & light items\n"; },
+    [](HeavyItem&, HeavyItem& ) { cout << "2 heavy items\n"; },
+}, basicPackA, basicPackB);
+```
+***Output:***
+```cpp
+2 light items
+```
+***remember: Default variant constructor constructs a variant holding the value-initialized value of the first alternative (index() is zero)***
+
+std::visit not only can take many variants, but also those variants might be of a different type.
+
+To illustrate that functionality I came up with the following example:
+
+Let’s say we have an item (fluid, heavy, light or something fragile) and we’d like to match it with a proper box (glass, cardboard, reinforced box, a box with amortization).
+
+In C++17 with variants and std::visit we can try with the following implementation:
+
+```cpp
+struct Fluid { };
+struct LightItem { };
+struct HeavyItem { };
+struct FragileItem { };
+
+struct GlassBox { };
+struct CardboardBox { };
+struct ReinforcedBox { };
+struct AmortisedBox { };
+
+variant<Fluid, LightItem, HeavyItem, FragileItem> item { 
+    Fluid() };
+variant<GlassBox, CardboardBox, ReinforcedBox, AmortisedBox> box { 
+    CardboardBox() };
+
+std::visit(overload{
+    [](Fluid&, GlassBox& ) { 
+        cout << "fluid in a glass box\n"; },
+    [](Fluid&, auto ) { 
+        cout << "warning! fluid in a wrong container!\n"; },
+    [](LightItem&, CardboardBox& ) { 
+        cout << "a light item in a cardboard box\n"; },
+    [](LightItem&, auto ) { 
+        cout << "a light item can be stored in any type of box, "
+                "but cardboard is good enough\n"; },
+    [](HeavyItem&, ReinforcedBox& ) { 
+        cout << "a heavy item in a reinforced box\n"; },
+    [](HeavyItem&, auto ) { 
+        cout << "warning! a heavy item should be stored "
+                "in a reinforced box\n"; },
+    [](FragileItem&, AmortisedBox& ) { 
+        cout << "fragile item in an amortised box\n"; },
+    [](FragileItem&, auto ) { 
+        cout << "warning! a fragile item should be stored "
+                "in an amortised box\n"; },
+}, item, box);
+```
+Output:
+```cpp
+warning! fluid in a wrong container!
+```
+
+We have four types of items and four types of boxes. We’d like to match the correct box with the item.
+
+std::visit takes two variants item and box and then invokes a proper overload and shows if the types are compatible or not.
+The types are very simple, but there’s no problem with extending them and adding features like wight, size or other important members.
+
+In theory, we should write all combinations of overloads: it means 4*4 = 16 functions.
+How to Skip Overloads in std::visit?
+
+```cpp
+std::variant<int, float, char> v1 { 's' };
+std::variant<int, float, char> v2 { 10 };
+
+std::visit(overloaded{
+        [](int a, int b) { },
+        [](int a, float b) { },
+        [](int a, char b) { },
+        [](float a, int b) { },
+        [](auto a, auto b) { }, // << default!
+    }, v1, v2);
+```
+In the example above you can see that only four overloads have specific types - let’s say those are the “valid” (or “meaningful”) overloads. The rest is handled by generic lambda (available since C++14).
+
+In our main example with items and boxes I use this technique also in a different form. For example:
+```cpp
+[](FragileItem&, auto ) { 
+    cout << "warning! a fragile item should be stored "
+            "in an amortised box\n"; },
+```
+The generic lambda will handle all overloads taking one concrete argument ***FragileItem*** and then the second argument is not “important”.
