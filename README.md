@@ -433,3 +433,91 @@ In our main example with items and boxes I use this technique also in a differen
             "in an amortised box\n"; },
 ```
 The generic lambda will handle all overloads taking one concrete argument ***FragileItem*** and then the second argument is not “important”.
+
+# 7 std::visit implementation
+```cpp
+#include <iostream>
+#include <string>
+#include <functional>
+#include <variant>
+#include <algorithm>
+#include <type_traits>
+
+template<typename T>
+using remove_cv_ref = std::remove_cv<typename std::remove_reference<T>::type>;
+
+template<size_t StartIndex, size_t EndIndex>
+struct compile_time_loop
+{
+    template<typename VisitorType, typename VariantType>
+    static void visit_visitor(VisitorType&& visitor, VariantType&& vt)
+    {
+        if constexpr(StartIndex < EndIndex)
+        {
+            if( auto ptr = std::get_if<StartIndex>(&vt) )   
+            {
+                std::forward<VisitorType>(visitor)(*ptr);   
+                return;
+            }
+        }
+
+        if constexpr(StartIndex + 1 < EndIndex)
+        {
+            compile_time_loop<StartIndex+1, EndIndex>::visit_visitor( std::forward<VisitorType>(visitor), std::forward<VariantType>(vt) );
+        }
+
+    }
+};
+
+template<typename VisitorType, typename VariantType>
+void visit(VisitorType&& visitor, VariantType&& vt)
+{    
+    using variant_t = typename remove_cv_ref<VariantType>::type;
+    constexpr std::size_t VariantSize = std::variant_size_v<variant_t>;
+    
+    compile_time_loop<0, VariantSize>::visit_visitor( std::forward<VisitorType>(visitor), std::forward<VariantType>(vt) );
+}
+
+struct VisitPackage
+{
+    void operator()(int) { std::cout << "INT\n"; }
+    void operator()(float) { std::cout << "FLOAT\n"; }
+};
+
+template<typename... Ts> 
+struct overload : Ts... 
+{ 
+    using Ts::operator()...; 
+};
+
+template<typename... Ts> 
+overload(Ts...) -> overload<Ts...>;
+
+
+struct BaseInt
+{
+    void operator()(int) { std::cout << "BaseInt...\n"; }
+};
+
+struct BaseDouble
+{
+    void operator()(float) { std::cout << "BaseDouble...\n"; }
+};
+
+int main()
+{
+     std::variant<int, float> package { 1.0f };
+     visit(VisitPackage(), package);     
+     
+//     overload<BaseInt, BaseDouble> ov{};
+//     ov(1.0f);
+    auto lambda1 = [](float) { std::cout << "float\n"; };
+    auto lambda2 = [](int) { std::cout << "int\n"; };
+    overload<decltype(lambda1), decltype(lambda2)> ov{lambda1, lambda2};
+    ov(1.0f);
+    
+    overload{ [](float) { std::cout << "float\n"; } }(1.0f);
+     
+     
+}
+```
