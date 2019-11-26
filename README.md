@@ -543,6 +543,7 @@ overload{ [](float) { std::cout << "float\n"; }, [](int) { std::cout << "int\n";
 
 ```
 ***NOTES!!!***
+
 Only below expression is valid. 
 ```cpp
 overload<decltype(lambda1), decltype(lambda2)> ov{lambda1, lambda2};
@@ -552,9 +553,13 @@ so...
 ```cpp
 overload<decltype(lambda1), decltype(lambda2)> ov{};
 ```
-will generate an error: 
+will generate an error:
+
 ***error: use of deleted function 'main()::<lambda(float)>::<lambda>()'***
-***    overload<decltype(lambda1), decltype(lambda2)>{}(1.0f);***
+    
+***overload<decltype(lambda1), decltype(lambda2)>{}(1.0f);***
+
 ***main.cpp:94:21: note: a lambda closure type has a deleted default constructor***
-***    auto lambda1 = [](float) { std::cout << "float\n"; };***
+
+***auto lambda1 = [](float) { std::cout << "float\n"; };***
 
