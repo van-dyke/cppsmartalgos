@@ -434,7 +434,11 @@ In our main example with items and boxes I use this technique also in a differen
 ```
 The generic lambda will handle all overloads taking one concrete argument ***FragileItem*** and then the second argument is not “important”.
 
-# 7 std::visit implementation
+# 7. std::visit implementation (C++14)
+***( taken from https://www.bfilipek.com/2018/06/variant.html )***
+
+In this chapter we would try to write our own implementation of ***std::visit***. This excersise should help us better understand some c++ features.
+
 ```cpp
 #include <iostream>
 #include <string>
@@ -463,7 +467,8 @@ struct compile_time_loop
 
         if constexpr(StartIndex + 1 < EndIndex)
         {
-            compile_time_loop<StartIndex+1, EndIndex>::visit_visitor( std::forward<VisitorType>(visitor), std::forward<VariantType>(vt) );
+            compile_time_loop<StartIndex+1, EndIndex>::visit_visitor( std::forward<VisitorType>(visitor),          
+                std::forward<VariantType>(vt) );
         }
 
     }
@@ -477,47 +482,79 @@ void visit(VisitorType&& visitor, VariantType&& vt)
     
     compile_time_loop<0, VariantSize>::visit_visitor( std::forward<VisitorType>(visitor), std::forward<VariantType>(vt) );
 }
+```
+We defined helper struct ***compile_time_loop*** which use recursive variadic template mechanism to visit all input variadic  types. Note that we use here ***if constexpr*** semantics which simplify struct calling in each iteration but requires at least C++14 compiler. Each iteration new StartIndex is calculated and pass into template parameter of the struct.
 
+Function ***visit*** calculate input std::variant size and pass it as constexpr expression to ****compile_time_loop*** (as template parameter). 
+
+In below, two lines we created helper code 
+```cpp
+template<typename T>
+using remove_cv_ref = std::remove_cv<typename std::remove_reference<T>::type>;
+...
+using variant_t = typename remove_cv_ref<VariantType>::type;
+```
+which remove const and reference qulifiers to provide pure type of used variadic template and pass it into ***std::variant_size_v*** to get its size (count of stored elements)
+
+***Test 1 - struct of override operator()***
+```cpp
 struct VisitPackage
 {
     void operator()(int) { std::cout << "INT\n"; }
     void operator()(float) { std::cout << "FLOAT\n"; }
 };
 
+int main()
+{
+     std::variant<int, float> package { 1.0f };
+     visit(VisitPackage(), package);            // Output: FLOAT
+}
+```
+***Test 2 - overload pattern***
+
+Let's create helper struct which override all ***operator()***'s. We want to call ***operator()*** method from the derived object. To do that, we have to bring the functions into the scope of the derived class like that (see 5.): 
+```cpp
 template<typename... Ts> 
 struct overload : Ts... 
 { 
     using Ts::operator()...; 
 };
 
+...
+
+auto lambda1 = [](float) { std::cout << "float\n"; };
+auto lambda2 = [](int) { std::cout << "int\n"; };
+overload<decltype(lambda1), decltype(lambda2)> ov{lambda1, lambda2};    // (***) -> see NOTES below
+ov(1.0f);   // Output: float
+
+// or even:
+overload<decltype(lambda1), decltype(lambda2)>{lambda1, lambda2}(1); // Output: int
+```
+
+Let's addidtional helper code, which create our own type deduction policy. After that we can use ***overload*** helper struct with inline lambda expression
+
+```cpp
 template<typename... Ts> 
 overload(Ts...) -> overload<Ts...>;
 
+...
 
-struct BaseInt
-{
-    void operator()(int) { std::cout << "BaseInt...\n"; }
-};
+overload{ [](float) { std::cout << "float\n"; }, [](int) { std::cout << "int\n"; } }(1);    // Output: int
 
-struct BaseDouble
-{
-    void operator()(float) { std::cout << "BaseDouble...\n"; }
-};
-
-int main()
-{
-     std::variant<int, float> package { 1.0f };
-     visit(VisitPackage(), package);     
-     
-//     overload<BaseInt, BaseDouble> ov{};
-//     ov(1.0f);
-    auto lambda1 = [](float) { std::cout << "float\n"; };
-    auto lambda2 = [](int) { std::cout << "int\n"; };
-    overload<decltype(lambda1), decltype(lambda2)> ov{lambda1, lambda2};
-    ov(1.0f);
-    
-    overload{ [](float) { std::cout << "float\n"; } }(1.0f);
-     
-     
-}
 ```
+***NOTES!!!***
+Only below expression is valid. 
+```cpp
+overload<decltype(lambda1), decltype(lambda2)> ov{lambda1, lambda2};
+```
+***Lambda closure do not implement default constructor!!!***
+so...
+```cpp
+overload<decltype(lambda1), decltype(lambda2)> ov{};
+```
+will generate an error: 
+***error: use of deleted function 'main()::<lambda(float)>::<lambda>()'***
+***    overload<decltype(lambda1), decltype(lambda2)>{}(1.0f);***
+***main.cpp:94:21: note: a lambda closure type has a deleted default constructor***
+***    auto lambda1 = [](float) { std::cout << "float\n"; };***
+
