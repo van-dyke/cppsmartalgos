@@ -563,3 +563,86 @@ will generate an error:
 
 ***auto lambda1 = [](float) { std::cout << "float\n"; };***
 
+
+# 8. Create a Functor that calls a group of functors in a given inheritance sequence
+
+***( taken from https://stackoverflow.com/questions/38024024/what-does-it-mean-to-inherit-from-lambda )***
+
+[...] because the constructor of the lambda isn't accessible (other than copy/move constructors). The only constructors guaranteed by a lambda type is a defaulted copy/move constructor. And there's no default constructor
+
+The closure type associated with a lambda-expression has no default constructor and a deleted copy assignment operator. It has a defaulted copy constructor and a defaulted move constructor ([class.copy]). [ Note: These special member functions are implicitly defined as usual, and might therefore be defined as deleted. — end note ]
+
+Example:
+
+```cpp
+template<typename TFirst, typename... TRemaining>
+class FunctionSequence : public TFirst, FunctionSequence<TRemaining...>
+{
+    public:
+    FunctionSequence(TFirst first, TRemaining... remaining)
+        : TFirst(first), FunctionSequence<TRemaining...>(remaining...)
+    {}
+
+    template<typename... Args>
+    decltype(auto) operator () (Args&&... args){
+        return FunctionSequence<TRemaining...>::operator()
+            (    TFirst::operator()(std::forward<Arg>(args)...)     );
+    }
+};
+
+template<typename T>
+class FunctionSequence<T> : public T
+{
+    public:
+    FunctionSequence(T t) : T(t) {}
+
+    using T::operator();
+};
+
+
+template<typename... T>
+auto make_functionSequence(T... t){
+    return FunctionSequence<T...>(t...);
+}
+```
+
+And test
+
+```cpp
+int main(){
+
+    //note: these lambda functions are bug ridden. Its just for simplicity here.
+    //For correct version, see the one on coliru, read on.
+    auto trimLeft = [](std::string& str) -> std::string& { str.erase(0, str.find_first_not_of(' ')); return str; };
+    auto trimRight = [](std::string& str) -> std::string& { str.erase(str.find_last_not_of(' ')+1); return str; };
+    auto capitalize = [](std::string& str) -> std::string& { for(auto& x : str) x = std::toupper(x); return str; };
+
+    auto trimAndCapitalize = make_functionSequence(trimLeft, trimRight, capitalize);
+    std::string str = " what a Hullabaloo     ";
+
+    std::cout << "Before TrimAndCapitalize: str = \"" << str << "\"\n";
+    trimAndCapitalize(str);
+    std::cout << "After TrimAndCapitalize:  str = \"" << str << "\"\n";
+
+    return 0;
+}
+```
+With output:
+***Before TrimAndCapitalize: str = " what a Hullabaloo     "***
+***After TrimAndCapitalize:  str = "WHAT A HULLABALOO"***
+
+Another cool trick: Since the resulting type from make_functionSequence(...) is a callable class. You can append more lambda's or callable to it at a later time.
+
+```cpp
+//.... As previously seen
+
+    auto trimAndCapitalize = make_functionSequence(trimLeft, trimRight, capitalize);
+
+    auto replace = [](std::string& str) -> std::string& { str.replace(0, 4, "Whaaaaat"); return str; };
+
+    //Add more Functors/lambdas to the original trimAndCapitalize
+    auto replaced = make_functionSequence(trimAndCapitalize, replace /*, ... */);
+    replaced(str2);
+```
+
+
