@@ -629,6 +629,7 @@ int main(){
 ```
 With output:
 ***Before TrimAndCapitalize: str = " what a Hullabaloo     "***
+
 ***After TrimAndCapitalize:  str = "WHAT A HULLABALOO"***
 
 Another cool trick: Since the resulting type from make_functionSequence(...) is a callable class. You can append more lambda's or callable to it at a later time.
