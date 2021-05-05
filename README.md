@@ -646,4 +646,142 @@ Another cool trick: Since the resulting type from make_functionSequence(...) is 
     replaced(str2);
 ```
 
+# 9. Pretty printing numbers on the fly differently per context on the fly
 
+***Source: "C++17 STL Cookbook" written by Jacek Galowicz***
+
+Class *format_guard* can automatically revert any stream format settings. Its constructor saves the formating flags, which *std::cout* has set at moment. Its destructor restores them to the state it had when constractor was called.
+
+```cpp
+#include <iostream>
+#include <iomanip>
+
+using namespace std;
+
+class format_guard {
+    decltype(cout.flags()) f {cout.flags()};
+
+public:
+    ~format_guard() { cout.flags(f); }
+};
+
+// *** helper test struct ***
+template <typename T>
+struct scientific_type {
+    T value;
+
+    explicit scientific_type(T val) : value{val} {}
+};
+// *** helper test struct ***
+
+template <typename T>
+ostream& operator<<(ostream &os, const scientific_type<T> &w) {
+    format_guard _;
+    os << scientific << uppercase << showpos;
+    return os << w.value;
+}
+
+int main()
+{
+    {
+        format_guard _;
+        cout << hex << scientific << showbase << uppercase;
+
+        cout << "Numbers with special formatting:\n";
+        cout << 0x123abc << '\n';
+        cout << 0.123456789 << '\n';
+    }
+
+    cout << "Same numbers, but normal formatting again:\n";
+    cout << 0x123abc << '\n';
+    cout << 0.123456789 << '\n';
+
+    cout << "Mixed formatting: "
+         << 123.0 << " "
+         << scientific_type{123.0} << " "
+         << 123.456 << '\n';
+
+}
+```
+
+# 10. Redirection output to consloe/files for specific code region
+
+***Source: "C++17 STL Cookbook" written by Jacek Galowicz***
+
+We are going to implement helper class that solves the problem of redirecting a stream and reverting that redirection again using RAII concept.
+Every stream buffer object has an internal buffer for which it acts as a front end. If we have a stream object *s*, and want to save its buffer into a variable a, and ibstall a new buffer *b*, this looks like following: *a = s.rdbuf(b)*. 
+And restoring it can be simple done with *s = rdbuf(a)*.
+
+```cpp
+#include <iostream>
+#include <fstream>
+
+using namespace std;
+
+class redirect_cout_region {
+    using buftype = decltype(cout.rdbuf());
+
+    ofstream ofs;
+    buftype buf_backup;
+
+public:
+    explicit redirect_cout_region(const string &filename)
+        : ofs{filename}, buf_backup{cout.rdbuf(ofs.rdbuf())}
+    {}
+
+    redirect_cout_region()
+        : ofs{}, buf_backup{cout.rdbuf(ofs.rdbuf())}
+    {}
+
+    ~redirect_cout_region() { cout.rdbuf(buf_backup); }
+};
+
+void my_output_heavy_function()
+{
+    cout << "some output\n";
+    cout << "this function does really heavy work\n";
+    cout << "... and lots of it...\n";
+    // ...
+}
+
+int main()
+{
+    cout << "Readable from normal stdout\n";
+
+    {
+        redirect_cout_region _ {"output.txt"};
+        cout << "Only visible in output.txt\n";
+        my_output_heavy_function();
+        redirect_cout_region _2 {"fofo.txt"};
+        cout << "fofo\n";
+    }
+
+    {
+        redirect_cout_region _;
+        cout << "This output will completely vanish\n";
+    }
+
+    cout << "Readable from normal stdout again\n";
+}
+```
+
+The constructor of class *redirect_cout_region* accepts a filename string as its parameter. The filename is used to initialize the file stream member *ofs*.
+After initializing it, we can feed it into *cout* as a new stream buffer. The same function that accepts the new buffer also returns a pointer to the old one, so we can save it in order to restore it later:
+
+```cpp
+    
+    explicit redirect_cout_region(const string &filename)
+        : ofs{filename}, buf_backup{cout.rdbuf(ofs.rdbuf())}
+    {}
+    
+```
+
+The default constructor does the same. The difference is, that it does not open any file. It will just drop its input we give it for printing:
+
+```cpp
+   redirect_cout_region()
+        : ofs{}, buf_backup{cout.rdbuf(ofs.rdbuf())}
+    {}
+```
+
+The destructor just restore our change.
