@@ -785,3 +785,49 @@ The default constructor does the same. The difference is, that it does not open 
 ```
 
 The destructor just restore our change.
+
+    
+# 11. CRTP to Avoid Code Duplication
+
+***(taken from: http://www.vishalchovatiya.com/crtp-c-examples/ )***
+
+Let say you have a set of containers that support the functions begin() & end(). But, the standard library’s requirements for containers require more functionalities like front(), back(), size(), etc.
+We can design such functionalities with a CRTP base class that provides common utilities solely based on derived class member function i.e. begin() & end() in our cases:
+
+```cpp
+
+template <typename T>
+class Container {
+    T &actual() { return *static_cast<T *>(this); }
+    T const &actual() const { return *static_cast<T const *>(this); }
+public:
+    decltype(auto) front() { return *actual().begin(); }
+    decltype(auto) back() { return *std::prev(actual().end()); }
+    decltype(auto) size() const { return std::distance(actual().begin(), actual().end()); }
+    decltype(auto) operator[](size_t i) { return *std::next(actual().begin(), i); }
+};
+
+```
+
+The above class provides the functions front(), back(), size() and operator[ ] for any subclass that has begin() & end().
+For example, subclass could be a simple dynamically allocated array as:
+
+```cpp
+
+template <typename T>
+class DynArray : public Container<DynArray<T>> {
+    size_t m_size;
+    unique_ptr<T[]> m_data;
+  public:
+    DynArray(size_t s) : m_size{s}, m_data{make_unique<T[]>(s)} {}
+    T *begin() { return m_data.get(); }
+    const T *begin() const { return m_data.get(); }
+    T *end() { return m_data.get() + m_size; }
+    const T *end() const { return m_data.get() + m_size; }
+};
+DynArray<int> arr(10);
+arr.front() = 2;
+arr[2]        = 5;
+asssert(arr.size() == 10);
+
+```
